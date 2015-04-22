@@ -59,7 +59,14 @@ func TestRegions(t *testing.T) {
 		}
 
 	}
+	a, b := regions.Djikstra("region1", "region6", sampleWeightFilter)
+	t.Log("cameFrom", a)
+	t.Log("cost", b)
 
+}
+
+func sampleWeightFilter(a, b *Region) int {
+	return 1
 }
 
 func GetRivers() (Rivers, error) {

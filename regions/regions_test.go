@@ -5,46 +5,9 @@ import (
 	"testing"
 )
 
-var configRegions string = `
-    [region1]
-    size = 3
-    neighbors = ["region2","region4"]
-
-
-    [region2]
-    size = 3
-    terrain = "mountain"
-    neighbors = ["region1","region3"]
-
-
-    [region3]
-    size = 3
-    neighbors = ["region2","region6"]
-
-    [region4]
-    size = 3
-    terrain = "plain"
-    neighbors = ["region1","region5"]
-
-
-    [region5]
-    size = 3
-    neighbors = ["region4"]
-
-    [region6]
-    size = 3
-    neighbors = ["region3"]
-    `
-
-var configRivers string = `
-    [yellowfork]
-    name="yellow fork"
-    borders = ["region2","region1","region1","region4"]
-    `
-
 func TestRegions(t *testing.T) {
 	var regions Regions
-	if _, err := toml.Decode(configRegions, &regions); err != nil {
+	if _, err := toml.Decode(ExampleRegions, &regions); err != nil {
 		t.Error(err)
 	}
 	if err := regions.ConnectAll(); err != nil {
@@ -66,12 +29,20 @@ func TestRegions(t *testing.T) {
 }
 
 func sampleWeightFilter(a, b *Region) int {
-	return 1
+	switch b.Terrain {
+	case Plain:
+		return 1
+	case Mountain:
+		return 3
+	default:
+		return 1
+
+	}
 }
 
 func GetRivers() (Rivers, error) {
 	var rivers Rivers
-	if _, err := toml.Decode(configRivers, &rivers); err != nil {
+	if _, err := toml.Decode(ExampleRivers, &rivers); err != nil {
 		return nil, err
 	}
 	return rivers, nil

@@ -2,7 +2,11 @@ package regions
 
 import (
 	"container/heap"
-	"fmt"
+	"errors"
+)
+
+var (
+	ErrorReconstructPath = errors.New("could not reconstruct path, too long")
 )
 
 type PathFilter func(*Region) bool
@@ -75,7 +79,7 @@ func (self Regions) Path(src, dst RegionId, filter PathFilter) (result []RegionI
 	return paths[dst]
 }
 
-func (self Regions) Djikstra(src, dst RegionId, weigher WeightFilter) (map[RegionId]RegionId, map[RegionId]int) {
+func (self Regions) Djikstra(src, dst RegionId, weigher WeightFilter) ([]RegionId, error) {
 	// queue of paths to try
 	frontier := new(PriorityQueue)
 	frontier.put(src, 0)
@@ -86,14 +90,15 @@ func (self Regions) Djikstra(src, dst RegionId, weigher WeightFilter) (map[Regio
 	iter := 0
 	for frontier.Len() > 0 {
 		current := frontier.Pop().(*Item).region
+		// we don't necessarily want the shortest number of steps, since there they may have a heavy cost.
+		// therefore, keep iterating through the map until frontier empties.
 		if current == dst {
-			break
+			// break
 		}
 		for _, edge := range self[current].Edges {
 			newCost := costSoFar[current]
 			newCost = newCost + weigher(edge.Src, edge.Dst)
 			if dstCost, ok := costSoFar[edge.Dst.Id]; ok {
-				fmt.Println(newCost, dstCost)
 				// if new cost is greater than the existing dst cost, don't overwrite it
 				if newCost > dstCost {
 					continue
@@ -109,14 +114,28 @@ func (self Regions) Djikstra(src, dst RegionId, weigher WeightFilter) (map[Regio
 			break
 		}
 	}
-	return cameFrom, costSoFar
+	return reconstructPath(cameFrom, src, dst)
+}
+
+func reconstructPath(cameFrom map[RegionId]RegionId, src, dst RegionId) (path []RegionId, err error) {
+	current := dst
+	path = append(path, current)
+	iter := 0
+	for current != src {
+		current = cameFrom[current]
+		path = append(path, current)
+		if iter > 150 {
+			return path, ErrorReconstructPath
+		}
+	}
+	return path, nil
 }
 
 type Item struct {
-	region   RegionId // The value of the item; arbitrary.
-	priority int      // The priority of the item in the queue.
+	region   RegionId
+	priority int
 	// The index is needed by update and is maintained by the heap.Interface methods.
-	index int // The index of the item in the heap.
+	index int
 }
 
 // A PriorityQueue implements heap.Interface and holds Items.
@@ -125,8 +144,8 @@ type PriorityQueue []*Item
 func (pq PriorityQueue) Len() int { return len(pq) }
 
 func (pq PriorityQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].priority > pq[j].priority
+	// We want Pop to give us the lowest priorirty cost, not greatest, priority so we use lesser than here.
+	return pq[i].priority < pq[j].priority
 }
 
 func (pq PriorityQueue) Swap(i, j int) {

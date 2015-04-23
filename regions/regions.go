@@ -123,3 +123,52 @@ func checkNeighbors(a RegionId, list []RegionId) bool {
 	}
 	return false
 }
+
+var ExampleRegions string = `
+    [region1]
+    size = 3
+    neighbors = ["region2","region4","region2cost"]
+
+
+    [region2]
+    size = 3
+    terrain = "plain"
+    neighbors = ["region1","region3"]
+
+    [region2cost]
+    terrain="mountain"
+    neighbors=["region1","region3cost"]
+
+    [region3cost]
+    terrain="mountain"
+    neighbors=["region2cost","region6"]
+
+
+    [region3]
+    size = 3
+    neighbors = ["region2","region7"]
+
+    [region7]
+    size = 3 
+    neighbors =["region3","region6"]
+
+    [region4]
+    size = 3
+    terrain = "plain"
+    neighbors = ["region1","region5"]
+
+
+    [region5]
+    size = 3
+    neighbors = ["region4"]
+
+    [region6]
+    size = 3
+    neighbors = ["region7","region3cost"]
+    `
+
+var ExampleRivers string = `
+    [yellowfork]
+    name="yellow fork"
+    borders = ["region2","region1","region1","region4"]
+    `

@@ -12,19 +12,24 @@ type armyId string
 
 type Armies map[armyId]*Army
 
+type SupplyStatus string
+
+const (
+	CUTOFF_STARVING  SupplyStatus = "CUTOFF_STARVING"
+	CUTOFF_SURVIVING SupplyStatus = "CUTOFF_SURVIVING"
+)
+
 type Army struct {
-	Name             string
-	Id               armyId
-	Morale           int
-	Strength         int
-	StartingRegion   regions.RegionId
-	HomeRegion       regions.RegionId
-	Region           *regions.Region
-	CutOff           bool
-	Home             *regions.Region
-	StartingHostiles []armyId
-	Hostiles         []*Army
-	House            families.HouseId
+	Id             armyId
+	Morale         int
+	Strength       int
+	Size           int
+	SupplyStatus   SupplyStatus
+	StartingRegion regions.RegionId
+	HomeRegion     regions.RegionId
+	Region         *regions.Region
+	Home           *regions.Region
+	House          families.HouseId
 }
 
 // Using config values to initialize the rest of the object
@@ -50,7 +55,7 @@ func (self Armies) EvalSupplies(r regions.Regions) error {
 	for _, army := range self {
 		supplied := army.EvalSupplyRoute(r)
 		if !supplied {
-			army.CutOff = true
+			army.SupplyStatus = CUTOFF_STARVING
 		}
 	}
 	return nil
@@ -78,7 +83,24 @@ func (self *Army) March(to *regions.Edge) error {
 
 func (self *Army) ValidateMarch(edge *regions.Edge) (bool, error) {
 	if self.Region.Id != edge.Src.Id {
-		return false, errors.New(fmt.Sprintf("march invalid: army %v not located at %v", self.Name, edge.Src))
+		return false, errors.New(fmt.Sprintf("march invalid: army %v not located at %v", self.Id, edge.Src))
 	}
 	return true, nil
 }
+
+func newArmy(a *Army) *Army {
+	b := *a
+	return &b
+}
+
+var SampleArmies = `
+[army1]
+startingRegion="region3cost"
+homeRegion="region1"
+house="house1"
+
+[army2]
+startingRegion="region1"
+homeRegion="region1"
+house="house2"
+`

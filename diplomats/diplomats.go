@@ -40,8 +40,8 @@ func (self *DiplomatsTable) IsEnemy(houseId1, houseId2 families.HouseId) bool {
 	return self.RelationsTable[houseId1][houseId2].OfficialStatus == ENEMY
 }
 
-func (self *DiplomatsTable) IsAlly(a, b families.HouseId) bool {
-	return self.RelationsTable[a][b].OfficialStatus == ALLIED
+func (self *DiplomatsTable) IsAlly(houseId1, houseId2 families.HouseId) bool {
+	return self.RelationsTable[houseId1][houseId2].OfficialStatus == ALLIED
 }
 
 type Relation struct {
@@ -128,6 +128,6 @@ func newRelation(h1, h2 *families.House) *Relation {
 var ExampleTable = `
     
     [relations.house1.house2]
-    official_status="ENEMY"
+    official_status="ALLIED"
     relation_status="HATRED"  
     `

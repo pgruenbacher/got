@@ -13,6 +13,7 @@ var (
 
 type Boundary interface {
 	borders() []RegionId
+	Penalty() int
 }
 
 type Boundaries interface {
@@ -20,26 +21,45 @@ type Boundaries interface {
 }
 
 type River struct {
-	Name    string
-	Borders []RegionId
+	Name            string
+	Borders         []RegionId
+	MovementPenalty int `toml:"movement_penalty"`
 }
 
 func (r River) borders() []RegionId {
 	return r.Borders
 }
 
+func (r River) Penalty() int {
+	return r.MovementPenalty
+}
+
 type Rivers map[string]*River
 
 type Wall struct {
-	Name    string
-	Borders []RegionId
+	Name            string
+	Borders         []RegionId
+	MovementPenalty int `toml:"movement_penalty"`
 }
 
 func (r Wall) borders() []RegionId {
 	return r.Borders
 }
 
+func (r Wall) Penalty() int {
+	return r.MovementPenalty
+}
+
 type Walls map[string]*Wall
+
+type NoBoundary bool
+
+func (NoBoundary) Penalty() int {
+	return 0
+}
+func (NoBoundary) borders() []RegionId {
+	return nil
+}
 
 func (self Regions) IncorporateBoundary(b Boundary) error {
 	if len(b.borders())%2 != 0 {
@@ -88,3 +108,10 @@ func (self Regions) IncorporateBoundary(b Boundary) error {
 	}
 	return nil
 }
+
+var ExampleRivers string = `
+    [yellowfork]
+    name="yellow fork"
+    borders = ["region2","region1","region1","region4"]
+    movement_penalty = 2
+    `

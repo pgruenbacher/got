@@ -38,8 +38,8 @@ type Region struct {
 type Terrain string
 
 const (
-	Mountain Terrain = "mountain"
-	Plain    Terrain = "plain"
+	Mountain Terrain = "MOUNTAIN"
+	Plain    Terrain = "PLAIN"
 )
 
 /*
@@ -96,12 +96,14 @@ func (self Regions) ConnectAll() error {
 
 func (self *Region) Connect(region *Region) error {
 	away := &Edge{
-		Src: self,
-		Dst: region,
+		Src:      self,
+		Dst:      region,
+		Boundary: new(NoBoundary),
 	}
 	here := &Edge{
-		Src: region,
-		Dst: self,
+		Src:      region,
+		Dst:      self,
+		Boundary: new(NoBoundary),
 	}
 	self.Edges[region.Id] = away
 	region.Edges[self.Id] = here
@@ -132,20 +134,21 @@ var ExampleRegions string = `
 
     [region2]
     size = 3
-    terrain = "plain"
+    terrain = "PLAIN"
     neighbors = ["region1","region3"]
 
     [region2cost]
-    terrain="mountain"
+    terrain="MOUNTAIN"
     neighbors=["region1","region3cost"]
 
     [region3cost]
-    terrain="mountain"
+    terrain="MOUNTAIN"
     neighbors=["region2cost","region6"]
 
 
     [region3]
     size = 3
+    terrain="PLAIN"
     neighbors = ["region2","region7"]
 
     [region7]
@@ -154,7 +157,7 @@ var ExampleRegions string = `
 
     [region4]
     size = 3
-    terrain = "plain"
+    terrain = "PLAIN"
     neighbors = ["region1","region5"]
 
 
@@ -165,10 +168,4 @@ var ExampleRegions string = `
     [region6]
     size = 3
     neighbors = ["region7","region3cost"]
-    `
-
-var ExampleRivers string = `
-    [yellowfork]
-    name="yellow fork"
-    borders = ["region2","region1","region1","region4"]
     `

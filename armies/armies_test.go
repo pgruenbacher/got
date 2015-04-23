@@ -39,11 +39,25 @@ func TestArmies(t *testing.T) {
 	if err := armies.Init(rs); err != nil {
 		t.Error(err)
 	}
+	// Army Manager
 	var armyManager ArmiesManager
+	if _, err := toml.Decode(ExampleTerrainPenalty, &armyManager.Config.TerrainPenalties); err != nil {
+		t.Error(err)
+	}
+	t.Log(armyManager.Config.TerrainPenalties)
 	if err := armyManager.Init(armies, rs, table); err != nil {
 		t.Error(err)
 	}
 
-	orders := armyManager.GivePossibleOrders("army1")
-	t.Log(orders)
+	// orders := armyManager.GivePossibleOrders("army1")
+	// t.Log(orders)
+
+	orders := []MarchOrder{
+		SampleAttackOrder,
+		SampleMarchOrder,
+	}
+
+	if _, err := armyManager.ReadOrders(orders); err != nil {
+		t.Error(err)
+	}
 }

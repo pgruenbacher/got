@@ -30,10 +30,11 @@ type Context string
 
 const (
 	// Order and Event Contexts
-	RETREAT         Context = "RETREAT"
-	ATTACK          Context = "ATTACK"
-	REDIRECT_ATTACK Context = "REDIRECT_ATTACK"
-	MARCH           Context = "MARCH"
+	RETREAT                Context = "RETREAT"
+	ATTACK                 Context = "ATTACK"
+	REDIRECT_ATTACK        Context = "REDIRECT_ATTACK"
+	MARCH                  Context = "MARCH"
+	CANCEL_NEUTRAL_PRESENT Context = "CANCEL_NEUTRAL_PRESENT"
 	/*
 	 *  Event Contexts
 	 */
@@ -41,7 +42,12 @@ const (
 	STRATEGIC_RETREAT Context = "STRATEGIC_RETREAT"
 	// attack, but all enemy marched elsewhere
 	ATTACK_PURSUIT Context = "ATTACK_PURSUIT"
-	// unexpected attack,
+	// army that was marching is attacked
+	CAUGHT_ATTACK Context = "CAUGHT_ATTACK"
+	// Suprise attack for an unexpected enemy in region
+	SURPRISE_ATTACK Context = "SURPRISE_ATTACK"
+	// Surprise retreat into a region with an unexpected enemy
+	SURPRISE_RETREAT Context = "SURPRISE_RETREAT"
 )
 
 // Events
@@ -56,12 +62,7 @@ type MarchEvent struct {
 	ArmyEvent
 	Src regions.RegionId
 	Dst regions.RegionId
-}
-
-type AttackEvent struct {
-	ArmyEvent
-	Src regions.RegionId
-	Dst regions.RegionId
+	Ctx Context
 }
 
 // manager structeure
@@ -73,14 +74,17 @@ type ArmiesManager struct {
 }
 
 type Config struct {
-	TerrainPenalties TerrainPenalties
+	TerrainPenalties  TerrainPenalties
+	DefenseBonuses    map[regions.Terrain]CombatModifier `toml:"Defense_Bonuses",validate:"max=1,min=-1"`
+	ConstantModifiers map[Context]CombatModifier         `toml:"Context_Modifiers",validate:"max=1,min=-1"`
 }
 
 type TerrainPenalties map[regions.Terrain]TerrainPenalty
+
 type TerrainPenalty map[regions.Terrain]Penalty
+
 type Penalty struct {
 	MovementPenalty int
-	AttackPenalty   int
 }
 
 /*
@@ -105,8 +109,8 @@ func (self ArmiesManager) marchPrioritize(order MarchOrder) int {
 			terrainPenalty = p.MovementPenalty
 		}
 	}
-	boundaryPenalty = edge.Boundary.Penalty()
-	return terrainPenalty + boundaryPenalty
+	boundaryPenalty = edge.Boundary.MovePenalty()
+	return terrainPenalty + boundaryPenalty + self.Armies[order.ArmyId].Size
 }
 
 func (self *ArmiesManager) EvaluateArmies() error {
@@ -135,12 +139,7 @@ outerloop:
 	for _, to := range army.Region.Edges {
 		for _, otherArmy := range armiesWithin(self.Armies, to.Dst) {
 			if self.diplomacy.IsEnemy(army.House, otherArmy.House) {
-				attackOrder := MarchOrder{
-					ArmyOrder: newArmyOrder(army.Id),
-					Src:       to.Src.Id,
-					Dst:       to.Dst.Id,
-					Ctx:       ATTACK,
-				}
+				attackOrder := newMarchOrder(army.Id, to.Src.Id, to.Dst.Id, ATTACK)
 				orders = append(orders, attackOrder)
 				// skip the move order append
 				continue outerloop
@@ -166,24 +165,18 @@ func (self *ArmiesManager) marchOrders(orders []MarchOrder) (e []MarchEvent, err
 	if err = self.validateMarchOrders(orders); err != nil {
 		return e, err
 	}
-	self.checkDestinations(orders)
-	// for _, order := range orders {
-	// 	// get the army to perform on
-	// 	army := self.Armies[order.ArmyId]
-	// 	// Perform the march
-	// 	edge := army.Region.Edges[order.Dst]
-	// 	if err = army.March(edge); err != nil {
-	// 		return e, err
-	// 	}
-	// 	// make the event
-	// 	event := MarchEvent{
-	// 		ArmyEvent: newArmyEvent(army.Id),
-	// 		Src:       edge.Src.Id,
-	// 		Dst:       edge.Dst.Id,
-	// 	}
-	// 	e = append(e, event)
 
-	// }
+	tmpArmies := make(Armies, len(self.Armies))
+	copyArmies(tmpArmies, self.Armies)
+
+	events, battles, err := self.checkDestinations(tmpArmies, orders)
+	if err != nil {
+		return e, err
+	}
+	e = append(e, events...)
+	fmt.Println(tmpArmies["army1"].Size, tmpArmies["army1"].Morale, "amrmy2:", tmpArmies["army2"].Size, tmpArmies["army2"].Morale)
+	_, err = self.resolveBattles(battles)
+	fmt.Println(tmpArmies["army1"].Size, tmpArmies["army1"].Morale, "amrmy2:", tmpArmies["army2"].Size, tmpArmies["army2"].Morale)
 	return e, nil
 }
 
@@ -200,10 +193,8 @@ func armiesWithin(a Armies, region *regions.Region) (armies []*Army) {
 	return armies
 }
 
-func (self *ArmiesManager) checkDestinations(orders []MarchOrder) (e []MarchEvent, err error) {
+func (self *ArmiesManager) checkDestinations(tmpArmies Armies, orders []MarchOrder) (events []MarchEvent, combats battles, err error) {
 	// create a temporary copy of the armies and their future destinations.
-	tmpArmies := make(Armies, len(self.Armies))
-	copyArmies(tmpArmies, self.Armies)
 	// perform movement penalties and army prioritizations for moves, then return queue of armies
 	pq := new(PriorityQueue)
 	for idx, order := range orders {
@@ -218,30 +209,65 @@ outerLoop:
 	for pq.Len() > 0 {
 		fmt.Println("as")
 		order := orders[pq.Pop().(*Item).value]
+		army := tmpArmies[order.ArmyId]
 		// innerLoop:
-		for _, army := range armiesWithin(tmpArmies, self.regions[order.Dst]) {
-			if self.diplomacy.IsEnemy(tmpArmies[order.ArmyId].House, army.House) {
-				// initiate attack on house, cancel the other army's march order if it has one
-				fmt.Println("attack!")
+		for _, army2 := range armiesWithin(tmpArmies, self.regions[order.Dst]) {
+			// army may already be in combat, but continue other possible attack directions if it is returning attack or attacking different army
+			if self.diplomacy.IsEnemy(army.House, army2.House) {
+				// initiate attack on army within region
+				// set status of both armies as in combat
+				army.setInCombat()
+				army2.setInCombat()
+				switch order.Ctx {
+				// army attempted to retreat from battle, but is now caught in another battle by an enemy that had moved into that region quicker
+				case RETREAT:
+					events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, ATTACK))
+					fmt.Println("caught retreat!")
+					combats = append(combats, newBattle(army, army2, ATTACK))
+
+				case ATTACK:
+					// march event with attack refers to a successful intentional attack event
+					events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, ATTACK))
+					fmt.Println("attack!")
+					combats = append(combats, newBattle(army, army2, ATTACK))
+				case MARCH:
+					// march event with suprise attack refers to an unintentional attack of enemy in region
+					events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, SURPRISE_ATTACK))
+					fmt.Println("surprise attack!")
+					combats = append(combats, newBattle(army, army2, SURPRISE_ATTACK))
+				}
 				continue outerLoop
 
 			}
-			if self.diplomacy.IsAlly(tmpArmies[order.ArmyId].House, army.House) {
-				// army may move into region if there is an ally and there is no military
-				fmt.Println("allies! move in!")
+			// if army is being attacked, and not marching against an enemy then disregard other march orders
+			if army.inCombat() {
+				// cancel order
 				continue outerLoop
 			}
-			// ELSE there is a neutral army present, cannot enter the region
+			// army is neither attacking nor being attacked
+			if self.diplomacy.IsAlly(army.House, army2.House) {
+				// army may move into region if there is an ally and there is no military
+				fmt.Println("allies! move in!")
+				army.March(army.Region.Edges[order.Dst])
+				events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, MARCH))
+				continue outerLoop
+			}
+			// ELSE there is a neutral army present, cannot enter the region, should not have been a legal move in the first place.
+			// since there is no idea if the neutral army will be staying or leaving to the player if it had been there in the first place.
+			// if quicker netural army moved there first...then tough luck.
 			// cancel army order
 			fmt.Println("cancel order")
+			events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, CANCEL_NEUTRAL_PRESENT))
 			continue outerLoop
 		}
-		// if no armies present, then move in!
-		army := tmpArmies[order.ArmyId]
+		// if army entering foreign region but not at war and does not have permission...
+
+		// if no armies present, then move on in!
 		army.March(army.Region.Edges[order.Dst])
+		events = append(events, newMarchEvent(order.ArmyId, order.Src, order.Dst, MARCH))
 		fmt.Println("move army!")
 	}
-	return nil, nil
+	return events, combats, nil
 }
 
 /*
@@ -293,6 +319,24 @@ func newArmyEvent(id armyId) ArmyEvent {
 	}
 }
 
+func newMarchOrder(id armyId, src, dst regions.RegionId, ctx Context) MarchOrder {
+	return MarchOrder{
+		ArmyOrder: newArmyOrder(id),
+		Src:       src,
+		Dst:       dst,
+		Ctx:       ctx,
+	}
+}
+
+func newMarchEvent(id armyId, src, dst regions.RegionId, ctx Context) MarchEvent {
+	return MarchEvent{
+		ArmyEvent: newArmyEvent(id),
+		Src:       src,
+		Dst:       dst,
+		Ctx:       ctx,
+	}
+}
+
 func newArmyOrder(id armyId) ArmyOrder {
 	return ArmyOrder{
 		Order:  actions.NewOrder(),
@@ -311,12 +355,14 @@ var SampleMarchOrder = MarchOrder{
 	ArmyOrder: newArmyOrder("army1"),
 	Src:       "region3cost",
 	Dst:       "region2cost",
+	Ctx:       MARCH,
 }
 
-var SampleAttackOrder = MarchOrder{
+var SampleMarchOrder2 = MarchOrder{
 	ArmyOrder: newArmyOrder("army2"),
 	Src:       "region1",
 	Dst:       "region2cost",
+	Ctx:       MARCH,
 }
 
 // Terrain movements are on orders of 10 from 10-100.
@@ -333,3 +379,12 @@ var ExampleTerrainPenalty string = `
     [MOUNTAIN.MOUNTAIN]
     movementPenalty  = 50
     `
+
+var ExampleModifiers string = `
+	[Defense_Bonuses]
+	PLAIN = 0.0
+	HILL = 0.1
+	MOUNTAIN = 0.3
+	[Context_Modifiers]
+	SURPRISE_ATTACK=-0.3
+	`

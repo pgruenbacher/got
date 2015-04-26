@@ -21,6 +21,7 @@ func TestArmies(t *testing.T) {
 	var armies Armies
 	if _, err := toml.Decode(SampleArmies, &armies); err != nil {
 		t.Error(err)
+		return
 	}
 
 	var table diplomats.DiplomatsTable
@@ -30,21 +31,29 @@ func TestArmies(t *testing.T) {
 	var h families.Houses
 	if _, err := toml.Decode(families.ExampleHouses, &h); err != nil {
 		t.Error(err)
+		return
 	}
 
 	h.InitializeAll()
 	if err := table.Init(h); err != nil {
 		t.Error(err)
+		return
 	}
 	if err := armies.Init(rs); err != nil {
 		t.Error(err)
+		return
 	}
 	// Army Manager
 	var armyManager ArmiesManager
 	if _, err := toml.Decode(ExampleTerrainPenalty, &armyManager.Config.TerrainPenalties); err != nil {
 		t.Error(err)
+		return
 	}
-	t.Log(armyManager.Config.TerrainPenalties)
+	if _, err := toml.Decode(ExampleModifiers, &armyManager.Config); err != nil {
+		t.Error(err)
+		return
+	}
+	t.Log(armyManager.Config)
 	if err := armyManager.Init(armies, rs, table); err != nil {
 		t.Error(err)
 	}
@@ -53,8 +62,8 @@ func TestArmies(t *testing.T) {
 	// t.Log(orders)
 
 	orders := []MarchOrder{
-		SampleAttackOrder,
 		SampleMarchOrder,
+		SampleMarchOrder2,
 	}
 
 	if _, err := armyManager.ReadOrders(orders); err != nil {

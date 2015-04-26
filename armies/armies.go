@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"gopkg.in/validator.v2"
+
 	"github.com/pgruenbacher/got/families"
 	"github.com/pgruenbacher/got/regions"
 )
@@ -21,20 +23,34 @@ const (
 
 type Army struct {
 	Id             armyId
-	Morale         int
-	Strength       int
-	Size           int
-	SupplyStatus   SupplyStatus
-	StartingRegion regions.RegionId
-	HomeRegion     regions.RegionId
+	Morale         int `validate:"min=1,max=5"`
+	Size           int `validate:"min=1,max=100"`
+	Quality        int `validate:"min=1,max=5"`
+	combatState    combatStatus
+	SupplyState    SupplyStatus
+	DefenseState   defenseStatus
+	StartingRegion regions.RegionId `validate:"nonzero"`
+	HomeRegion     regions.RegionId //May get rid of, want to use house reference
 	Region         *regions.Region
 	Home           *regions.Region
-	House          families.HouseId
+	House          families.HouseId `validate:"nonzero"`
+}
+
+func (self Army) Strength() int {
+	return self.Morale + self.Size + self.Quality
 }
 
 // Using config values to initialize the rest of the object
 func (self Armies) Init(r regions.Regions) error {
-	for _, army := range self {
+	for armyId, army := range self {
+		// perform struct field validations
+		if err := validator.Validate(army); err != nil {
+			fmt.Println("error!")
+			// values not valid, deal with errors here
+			return err
+		}
+		// set army id using existing key
+		army.Id = armyId
 		// declare starting regions
 		if region, ok := r[army.StartingRegion]; ok {
 			army.Region = region
@@ -55,7 +71,7 @@ func (self Armies) EvalSupplies(r regions.Regions) error {
 	for _, army := range self {
 		supplied := army.EvalSupplyRoute(r)
 		if !supplied {
-			army.SupplyStatus = CUTOFF_STARVING
+			army.SupplyState = CUTOFF_STARVING
 		}
 	}
 	return nil
@@ -98,9 +114,15 @@ var SampleArmies = `
 startingRegion="region3cost"
 homeRegion="region1"
 house="house1"
+morale = 3
+size = 30
+quality = 3
 
 [army2]
 startingRegion="region1"
 homeRegion="region1"
 house="house2"
+morale = 4
+size = 30
+quality = 3
 `

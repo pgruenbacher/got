@@ -1,8 +1,9 @@
 package regions
 
 import (
-	"github.com/BurntSushi/toml"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestRegions(t *testing.T) {
@@ -16,7 +17,6 @@ func TestRegions(t *testing.T) {
 
 	rivers, _ := GetRivers()
 	for _, boundary := range rivers {
-
 		if err := regions.IncorporateBoundary(boundary); err != nil {
 			t.Error(err)
 		}

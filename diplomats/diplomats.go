@@ -128,6 +128,6 @@ func newRelation(h1, h2 *families.House) *Relation {
 var ExampleTable = `
     
     [relations.house1.house2]
-    official_status="ALLIED"
+    official_status="ENEMY"
     relation_status="HATRED"  
     `

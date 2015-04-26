@@ -2,6 +2,7 @@ package regions
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -13,7 +14,8 @@ var (
 
 type Boundary interface {
 	borders() []RegionId
-	Penalty() int
+	MovePenalty() int
+	AttackPenalty() float32
 }
 
 type Boundaries interface {
@@ -21,40 +23,58 @@ type Boundaries interface {
 }
 
 type River struct {
-	Name            string
-	Borders         []RegionId
-	MovementPenalty int `toml:"movement_penalty"`
+	Name             string
+	Borders          []RegionId
+	MovementPenalty  int     `toml:"movement_penalty"`
+	AttackingPenalty float32 `toml:"attack_penalty"`
+}
+
+func (r River) String() string {
+	return r.Name
 }
 
 func (r River) borders() []RegionId {
 	return r.Borders
 }
 
-func (r River) Penalty() int {
+func (r River) MovePenalty() int {
 	return r.MovementPenalty
+}
+
+func (self River) AttackPenalty() float32 {
+	return self.AttackingPenalty
 }
 
 type Rivers map[string]*River
 
 type Wall struct {
-	Name            string
-	Borders         []RegionId
-	MovementPenalty int `toml:"movement_penalty"`
+	Name             string
+	Borders          []RegionId
+	MovementPenalty  int     `toml:"movement_penalty"`
+	AttackingPenalty float32 `toml:"attack_penalty"`
 }
 
 func (r Wall) borders() []RegionId {
 	return r.Borders
 }
 
-func (r Wall) Penalty() int {
+func (r Wall) MovePenalty() int {
 	return r.MovementPenalty
+}
+
+func (self Wall) AttackPenalty() float32 {
+	return self.AttackingPenalty
 }
 
 type Walls map[string]*Wall
 
 type NoBoundary bool
 
-func (NoBoundary) Penalty() int {
+func (NoBoundary) MovePenalty() int {
+	return 0
+}
+
+func (NoBoundary) AttackPenalty() float32 {
 	return 0
 }
 func (NoBoundary) borders() []RegionId {
@@ -87,16 +107,19 @@ func (self Regions) IncorporateBoundary(b Boundary) error {
 			if edge1.Dst.Id == region2.Id {
 				for _, edge2 := range edge1.Dst.Edges {
 					if edge2.Dst.Id == region1.Id {
-						if edge1.Boundary != nil || edge2.Boundary != nil {
-							return BoundaryAlreadyAssigned
+						switch edge1.Boundary.(type) {
+						case *NoBoundary:
+							switch edge2.Boundary.(type) {
+							case *NoBoundary:
+								edge1.Boundary = b
+								edge2.Boundary = b
+								valid = true
+							default:
+								return errors.New(fmt.Sprintf("edge %v to %v already has boundary assigned", edge2.Src.Id, edge2.Dst.Id))
+							}
+						default:
+							return errors.New(fmt.Sprintf("edge %v to %v already has boundary assigned", edge1.Src.Id, edge1.Dst.Id))
 						}
-						// need to assign this way
-						// region1.Edges[edge1.Dst.Id].Boundary = b
-						// region2.Edges[edge2.Dst.Id].Boundary = a
-						edge1.Boundary = b
-						edge2.Boundary = b
-
-						valid = true
 					}
 				}
 			}
@@ -114,4 +137,5 @@ var ExampleRivers string = `
     name="yellow fork"
     borders = ["region2","region1","region1","region4"]
     movement_penalty = 2
+    attacing_penalty = -0.2
     `
